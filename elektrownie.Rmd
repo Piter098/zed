@@ -1,0 +1,93 @@
+---
+title: "Raport elektrownie"
+author: "Piotr Langa 117330"
+date: "27 listopada 2017"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Wstęp
+
+//Podsumowanie analizy
+//wszystkie dane wygladaja na znormalizowane oprócz irri_pvgis_mod
+//Wczytany zbiór nie zawiera wartości pustych więc pominięto ich usuwanie
+//wszystkie kolumny id odrzucam bo chyba ich nie potrzeba
+//część kolumn po angielsku część po włosku, co to w ogóle ma być
+
+
+## Wykorzystane biblioteki
+
+```{r, error=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
+```
+
+## Przygotowanie danych
+
+```{r}
+set.seed(123)
+file <- read.csv("elektrownie.csv")
+df <- file %>% select(-c(idsito,idbrand,idmodel))
+```
+
+## Podsumowanie zbioru danych
+
+``` {r}
+summary(df)
+colnames(df)
+```
+
+## Rozkład wartości atrybutów
+
+```{r warning=FALSE, message= FALSE, echo = FALSE, fig.height=4, fig.width=5}
+# attrs <- melt(sample_n(df,1000), id.vars = 'id')
+# ggplot(attrs, aes(x = value)) +
+# geom_histogram(stat = "count") +
+#   facet_wrap(~variable,scales="free", ncol = 4) +
+#   ylab("liczba") + xlab("wartość atrybutu")
+
+ggplot(sample_n(df,1000),aes(x = lat, color="green")) +
+ geom_histogram()
+summary(df$lat)
+ggplot(sample_n(df,1000),aes(x = lon, color="green")) +
+ geom_histogram()
+summary(df$lon)
+
+
+
+
+```
+
+## Testowe wykresy
+
+```{r}
+# sample_n(df,10000) %>%
+#   mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
+#   group_by(anno,day,ora,colr,kwh) %>%
+#   summarise(mean(kwh)) %>%
+#   ggplot(aes(x = ora, y = kwh, colour = factor(colr))) + 
+#   geom_point() + 
+#   facet_grid(. ~ anno)
+# 
+# sample_n(df,10000) %>% 
+#   mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
+#   group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
+#   summarise(mean(kwh),mean(cloudcover)) %>% 
+#   ggplot(aes(x = ora, y = kwh, fill = factor(colr))) + 
+#   geom_col() + facet_grid(. ~ anno)
+
+sample_n(df,100000) %>% 
+  mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
+  group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
+  summarise(mean(kwh),mean(cloudcover)) %>% 
+  ggplot(aes(x = ora, y = kwh, fill = factor(colr), color  = factor(colr))) + 
+  geom_smooth() + 
+  facet_grid(. ~ anno)
+```
