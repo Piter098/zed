@@ -9,6 +9,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = TRUE)
 ```
 
 ## Wstęp
@@ -34,31 +35,43 @@ library(reshape2)
 ```{r}
 set.seed(123)
 file <- read.csv("elektrownie.csv")
-df <- file %>% select(-c(idsito,idbrand,idmodel))
+df <- file
 ```
 
 ## Podsumowanie zbioru danych
 
+``` {r, echo= FALSE}
+#summary(df)
+rozmiar <- rbind(c(length(df[,1]),length(df)))
+knitr::kable(rozmiar,col.names = c("Liczba rekordów","Liczba atrybutów"),align = "l")
+```
+### Nazwy atrybutów
 ``` {r}
-summary(df)
 colnames(df)
 ```
 
 ## Rozkład wartości atrybutów
 
 ```{r warning=FALSE, message= FALSE, echo = FALSE, fig.height=4, fig.width=5}
-# attrs <- melt(sample_n(df,1000), id.vars = 'id')
-# ggplot(attrs, aes(x = value)) +
-# geom_histogram(stat = "count") +
-#   facet_wrap(~variable,scales="free", ncol = 4) +
-#   ylab("liczba") + xlab("wartość atrybutu")
+# lapply(colnames(df%>%select(-id)), function(name) {
+#   print(summary(df%>%select(name)))
+#   smp <- sample_n(df,1000)
+#   if(length( smp%>%select(name) %>% select(which(sapply(.,is.numeric)))) > 0){
+#   ggplot(smp,aes(x=smp%>%select(name))) +
+#  geom_histogram()}
+# })
 
+ attrs <- melt(sample_n(df,1000), id.vars = 'id')
+ ggplot(attrs, aes(x = value)) +
+ geom_histogram(stat = "count") +
+   facet_wrap(~variable,scales="free", ncol = 4) +
+   ylab("liczba") + xlab("wartość atrybutu")
+
+knitr::kable(t(summary(df)))
 ggplot(sample_n(df,1000),aes(x = lat, color="green")) +
  geom_histogram()
-summary(df$lat)
 ggplot(sample_n(df,1000),aes(x = lon, color="green")) +
  geom_histogram()
-summary(df$lon)
 
 
 
@@ -88,6 +101,14 @@ sample_n(df,100000) %>%
   group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
   summarise(mean(kwh),mean(cloudcover)) %>% 
   ggplot(aes(x = ora, y = kwh, fill = factor(colr), color  = factor(colr))) + 
+  geom_smooth() + 
+  facet_grid(. ~ anno)
+
+sample_n(df,100000) %>% 
+  mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
+  group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
+  summarise(mean(kwh),mean(cloudcover)) %>% 
+  ggplot(aes(x = day, y = kwh, fill = factor(colr), color  = factor(colr))) + 
   geom_smooth() + 
   facet_grid(. ~ anno)
 ```
