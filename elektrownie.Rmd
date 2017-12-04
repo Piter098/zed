@@ -8,7 +8,10 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(error = FALSE)
 knitr::opts_chunk$set(cache = TRUE)
 ```
 
@@ -23,92 +26,231 @@ knitr::opts_chunk$set(cache = TRUE)
 
 ## Wykorzystane biblioteki
 
-```{r, error=FALSE, message=FALSE, warning=FALSE}
+```{r}
 library(dplyr)
 library(ggplot2)
 library(reshape2)
-
+library(lubridate)
+library(caret)
 ```
 
 ## Przygotowanie danych
 
-```{r}
+```{r, echo = TRUE}
 set.seed(123)
 file <- read.csv("elektrownie.csv")
-df <- file
+df <- file %>% mutate(date = as.Date(file$data,format="%m/%d/%Y"))
 ```
 
 ## Podsumowanie zbioru danych
 
-``` {r, echo= FALSE}
-#summary(df)
+``` {r}
 rozmiar <- rbind(c(length(df[,1]),length(df)))
 knitr::kable(rozmiar,col.names = c("Liczba rekordów","Liczba atrybutów"),align = "l")
 ```
-### Nazwy atrybutów
+
+##### Nazwy atrybutów
+
 ``` {r}
 colnames(df)
 ```
 
 ## Rozkład wartości atrybutów
 
-```{r warning=FALSE, message= FALSE, echo = FALSE, fig.height=4, fig.width=5}
-# lapply(colnames(df%>%select(-id)), function(name) {
-#   print(summary(df%>%select(name)))
-#   smp <- sample_n(df,1000)
-#   if(length( smp%>%select(name) %>% select(which(sapply(.,is.numeric)))) > 0){
-#   ggplot(smp,aes(x=smp%>%select(name))) +
-#  geom_histogram()}
-# })
+### Atrybuty liczbowe
 
- attrs <- melt(sample_n(df,1000), id.vars = 'id')
+``` {r,  fig.width = 10, fig.height = 20}
+liczbAtr <- df %>% select(id, lat,lon,ageinmonths,anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,humidity,dewpoint,windbearing,cloudcover,tempi,irri,pressurei,windspeedi,humidityi,dewpointi,windbearingi,cloudcoveri,dist,altitude,azimuth,altitudei,azimuthi,irr_pvgis_mod,irri_pvgis_mod,kwh)
+
+a <- lapply(colnames(liczbAtr %>% select(-id)), function(x){ c(x, min = min(liczbAtr[,x]),max = max(liczbAtr[,x]), med = median(liczbAtr[,x]), mean = mean(liczbAtr[,x]), uniq = length(unique(liczbAtr[,x]))) })
+
+tab <- do.call(rbind, a)
+
+knitr::kable(tab,col.names = c("Atrybut","Minimum","Maksimum","Mediana","Średnia","Wartości unikalne"))
+
+attrs <- melt(sample_n(liczbAtr,10), id.vars = 'id')
  ggplot(attrs, aes(x = value)) +
  geom_histogram(stat = "count") +
-   facet_wrap(~variable,scales="free", ncol = 4) +
+   facet_wrap(~variable,scales="free", ncol = 3) +
    ylab("liczba") + xlab("wartość atrybutu")
 
-knitr::kable(t(summary(df)))
-ggplot(sample_n(df,1000),aes(x = lat, color="green")) +
- geom_histogram()
-ggplot(sample_n(df,1000),aes(x = lon, color="green")) +
- geom_histogram()
+```
 
+##### Wartości geograficzne
+
+* lat - szerokość geograficzna
+* lon - długość geograficzna
+* altitude - wysokość nad poziomem morza
+* azimuth - azymut.
+
+##### Wartości metorologiczne
+
+* temperatura_ambiente (część urojona "tempi") - temperaturę powietrza
+* irradiamento (część urojona irri) - nasłonecznienie
+* pressure (pressurei) - ciśnienie
+* windspeed (windspeedi) - prędkość wiatru
+* humidity (humidityi) - wilgotność powietrza
+* dewpoint (dewpointi) - punkt rosy
+* cloudcover (cloudcoveri) - zachmurzenie
+
+##### Pozostałe wartości
+
+* kwh - kilowatogodziny
+* ageinmonths - wiek czujnika w miesiącach
+
+##### Nieopisane wartości
+
+Częśc wartości okazała się niemożliwa do odgadnięcia z podanej nazwy
+
+* dist - jest to albo jakaś odległość fizyczna albo odległość na macierzy pomyłek
+* irr_pvgis_mod (irri_pvgis_mod)
+
+
+### Atrybuty nominalne
+
+``` {r, fig.width = 10, fig.height = 20}
+liczbAtr <- df %>% select(-c(lat,lon,ageinmonths,anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,humidity,dewpoint,windbearing,cloudcover,tempi,irri,pressurei,windspeedi,humidityi,dewpointi,windbearingi,cloudcoveri,dist,altitude,azimuth,altitudei,azimuthi,irr_pvgis_mod,irri_pvgis_mod,kwh,date))
+
+a <- lapply(colnames(liczbAtr), function(x){ c(x, uniq = length(unique(liczbAtr[,x]))) })
+
+tab <- do.call(rbind, a)
+
+knitr::kable(tab,col.names = c("Atrybut","Wartości unikalne"))
+
+attrs <- melt(sample_n(liczbAtr,10), id.vars = 'id')
+ ggplot(attrs, aes(x = value)) +
+ geom_histogram(stat = "count") +
+   facet_wrap(~variable,scales="free", ncol = 3) +
+   ylab("liczba") + xlab("wartość atrybutu")
+
+```
+
+##### Opis wartości
+* id - identyfikator pomiaru
+* idsito - id czujnika
+* idmodel - id modelu czujnika
+* idbrand - id marki
+* data - data i czas pomiaru
+* pcnm1... pcnm15 - wartości głównych współrzędnych macierzy sąsiedztwa
+* icon - ikona, prawdopodobnie jakieś oznaczenie techniczne 
+
+## Korelacja pomiędzy zmiennymi
+
+
+### Średni kwh od godziny i zachmurzenia z podziałem na rok
+
+Atrybut kwh został uśredniony dla danej godziny (ora) z okresu całego roku i zachmurzenia (cloudcover)
+
+```{r}
+df %>% 
+  mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
+  group_by(anno,day,ora,colr) %>% 
+  summarise(kwh2 = mean(kwh)) %>% 
+  ggplot(aes(x = ora, y = kwh2, fill = factor(colr), color  = factor(colr))) + 
+  geom_smooth() + 
+  guides(color=guide_legend(title="zachmurzenie"),fill=guide_legend(title="zachmurzenie")) + 
+  facet_grid(. ~ anno) +
+  xlab("godzina")+ylab("kwh")
+```
+
+### Średni kwh i średnie nasłonecznienie od godziny z podziałem na rok
+
+Atrybuty kwh i irradimento zostały uśrednione dla danej godziny (ora) z okresu całego roku
+
+```{r}
+df %>% 
+  group_by(anno,day,ora) %>% 
+  summarise(kwh2 = mean(kwh), irr = mean(irradiamento)) %>% 
+  ggplot(aes(x = ora)) + 
+  geom_smooth(aes(y=kwh2, color = "kwh", fill = "kwh")) + 
+  geom_smooth(aes(y=irr, color = "nasłonecznienie", fill = "nasłonecznienie")) + 
+  guides(color=guide_legend(title=""),fill=guide_legend(title="")) + 
+  facet_grid(. ~ anno) +
+  xlab("godzina")+ylab("wartość")
+```
+
+### Średni kwh od nasłonecznienia i wilgotności
+
+```{r}
+df %>% 
+  group_by(irradiamento,humidity) %>% 
+  summarise(kwh2 = mean(kwh)) %>% 
+  ggplot(aes(x = irradiamento, y = kwh2,  color  = humidity)) + 
+  geom_point()+
+  xlab("nasłonecznienie")+ylab("kwh")
+
+df %>% 
+  group_by(humidity,irradiamento) %>% 
+  summarise(kwh2 = mean(kwh)) %>% 
+  ggplot(aes(x = humidity, y = kwh2,  color = irradiamento)) + 
+  geom_point()+
+  xlab("wilgotność")+ylab("kwh")
+
+```
+
+Na powyższych wykresach można zauważyć korelację atrybutu kwh z wartością nasłonecznienia. Jednocześnie nie widać na nich korelacji kwh i wilgotności.
+
+### Średni kwh i średnie nasłonecznienie od miesiąca
+
+```{r}
+df %>% 
+  mutate(miesiac =  month(date, label = TRUE, abbr = FALSE)) %>%
+  group_by(miesiac) %>% 
+  summarise(kwh2 = mean(kwh), irr = mean(irradiamento)) %>% 
+  ggplot(aes(x = miesiac)) + 
+  geom_bar(stat = "identity", aes(y = kwh2, fill = "kwh")) +
+  geom_bar(stat = "identity", aes(y = irr, fill = "nasłonecznienie")) +
+  guides(fill=guide_legend(title="")) + 
+  xlab("godzina")+ylab("wartość")
+
+```
+
+Z wykresu wynika, że najwyższa wartość kwh jest latem i osiąga maksimum w czerwcu. Ponownie można zauważyć korelację kwh i nasłonecznienia.
+
+### test
+
+```{r}
+p <- df %>% ggplot(aes(x=kwh,y=irradiamento,frame = ora)) + geom_point()
 
 
 
 ```
 
-## Testowe wykresy
+
+## Regresja
 
 ```{r}
-# sample_n(df,10000) %>%
-#   mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
-#   group_by(anno,day,ora,colr,kwh) %>%
-#   summarise(mean(kwh)) %>%
-#   ggplot(aes(x = ora, y = kwh, colour = factor(colr))) + 
-#   geom_point() + 
-#   facet_grid(. ~ anno)
+
+attrs1 <- df %>% select(lat,lon,ageinmonths,anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,humidity,dewpoint,windbearing,cloudcover,altitude,azimuth,kwh)
+attrs2 <- df %>% select(ora,irradiamento,kwh)
+attrs3 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,humidity,dewpoint,windbearing,cloudcover,altitude,azimuth,kwh)
+attrs4 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,dewpoint,cloudcover,altitude,azimuth,kwh)
+attrs5 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,dewpoint,cloudcover,kwh)
+attrs6 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,dewpoint,cloudcover,kwh)
+
+inTrain <- createDataPartition(y = df$kwh, p = .75, list = FALSE)
+results <- lapply(list(attrs1,attrs2), function(a)
+{
+  training <- a[inTrain,]
+  testing <- a[-inTrain,]
+
+  fit <- train(kwh~., data = training, method = "lm", metric = "RMSE")
+  pred <- predict(fit, newdata = testing)
+  rmse <- defaultSummary(data.frame(obs=testing$kwh, pred=pred))[1]
+  data.frame(paste(colnames(a),collapse=", "),rmse)
+})
+tab <- do.call(rbind.data.frame,results)
+
+knitr::kable(tab,col.names = c("atrybuty","RMSE"))
+
+# inTrain <- createDataPartition(y = df$kwh, p = .75, list = FALSE)
+# training <- attrs[inTrain,]
+# testing <- attrs[-inTrain,]
 # 
-# sample_n(df,10000) %>% 
-#   mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
-#   group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
-#   summarise(mean(kwh),mean(cloudcover)) %>% 
-#   ggplot(aes(x = ora, y = kwh, fill = factor(colr))) + 
-#   geom_col() + facet_grid(. ~ anno)
-
-sample_n(df,100000) %>% 
-  mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
-  group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
-  summarise(mean(kwh),mean(cloudcover)) %>% 
-  ggplot(aes(x = ora, y = kwh, fill = factor(colr), color  = factor(colr))) + 
-  geom_smooth() + 
-  facet_grid(. ~ anno)
-
-sample_n(df,100000) %>% 
-  mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
-  group_by(anno,day,ora,cloudcover,colr,kwh) %>% 
-  summarise(mean(kwh),mean(cloudcover)) %>% 
-  ggplot(aes(x = day, y = kwh, fill = factor(colr), color  = factor(colr))) + 
-  geom_smooth() + 
-  facet_grid(. ~ anno)
+# 
+# 
+# fit <- train(kwh~., data = training, method = "lm", metric = "RMSE")
+# pred <- predict(fit, newdata = testing)
+# rmse <- defaultSummary(data.frame(obs=testing$kwh, pred=pred))$RMSE
+# rmse
 ```
