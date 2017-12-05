@@ -2,6 +2,7 @@
 title: "Raport elektrownie"
 author: "Piotr Langa 117330"
 date: "27 listopada 2017"
+runtime: shiny
 output:
   html_document:
     toc: true
@@ -17,11 +18,14 @@ knitr::opts_chunk$set(cache = TRUE)
 
 ## Wstęp
 
-//Podsumowanie analizy
-//wszystkie dane wygladaja na znormalizowane oprócz irri_pvgis_mod
-//Wczytany zbiór nie zawiera wartości pustych więc pominięto ich usuwanie
-//wszystkie kolumny id odrzucam bo chyba ich nie potrzeba
-//część kolumn po angielsku część po włosku, co to w ogóle ma być
+Przeprowadzona analiza pomogła znaleźć korelacje pomiędzy poszczególnymi wartościami z czujników a wytwarzaną energią. Wpływ miała tu nie tylko pora dnia i nasłonecznienie, ale również wilgotność, zachmurzenie, siła wiatru, azymut, szerokość i wysokość geograficzna, ciśnienie, punkt rosy i temperatura.
+
+Dostarczone dane nie posiadały opisów oprócz nazw kolumn więc miejscami trudno było określić za co odpowiadają dane atrybuty. Dane w większości były znormalizowane i nie posiadały wartości pustych.
+
+W zbiorze danych występowały wartości zerowe w miejscach gdzie nie powinny się znaleźć - np zerowa wartość atrybutu kwh w środku dnia. W analizie pominięto naprawę błędnych wartości ponieważ było ich niewiele a sama analiza operowała na średnich.
+
+Dane zawierały atrybuty liczbowe jak i nominalne.
+
 
 
 ## Wykorzystane biblioteki
@@ -32,6 +36,7 @@ library(ggplot2)
 library(reshape2)
 library(lubridate)
 library(caret)
+library(shiny)
 ```
 
 ## Przygotowanie danych
@@ -45,14 +50,14 @@ df <- file %>% mutate(date = as.Date(file$data,format="%m/%d/%Y"))
 ## Podsumowanie zbioru danych
 
 ``` {r}
-rozmiar <- rbind(c(length(df[,1]),length(df)))
+rozmiar <- rbind(c(length(file[,1]),length(file)))
 knitr::kable(rozmiar,col.names = c("Liczba rekordów","Liczba atrybutów"),align = "l")
 ```
 
 ##### Nazwy atrybutów
 
 ``` {r}
-colnames(df)
+colnames(file)
 ```
 
 ## Rozkład wartości atrybutów
@@ -68,7 +73,7 @@ tab <- do.call(rbind, a)
 
 knitr::kable(tab,col.names = c("Atrybut","Minimum","Maksimum","Mediana","Średnia","Wartości unikalne"))
 
-attrs <- melt(sample_n(liczbAtr,10), id.vars = 'id')
+attrs <- melt(liczbAtr, id.vars = 'id')
  ggplot(attrs, aes(x = value)) +
  geom_histogram(stat = "count") +
    facet_wrap(~variable,scales="free", ncol = 3) +
@@ -117,7 +122,7 @@ tab <- do.call(rbind, a)
 
 knitr::kable(tab,col.names = c("Atrybut","Wartości unikalne"))
 
-attrs <- melt(sample_n(liczbAtr,10), id.vars = 'id')
+attrs <- melt(liczbAtr, id.vars = 'id')
  ggplot(attrs, aes(x = value)) +
  geom_histogram(stat = "count") +
    facet_wrap(~variable,scales="free", ncol = 3) +
@@ -142,13 +147,13 @@ attrs <- melt(sample_n(liczbAtr,10), id.vars = 'id')
 Atrybut kwh został uśredniony dla danej godziny (ora) z okresu całego roku i zachmurzenia (cloudcover)
 
 ```{r}
-df %>% 
+df %>%
   mutate(colr = round(cloudcover*4, digits = 0)/4) %>%
-  group_by(anno,day,ora,colr) %>% 
-  summarise(kwh2 = mean(kwh)) %>% 
-  ggplot(aes(x = ora, y = kwh2, fill = factor(colr), color  = factor(colr))) + 
-  geom_smooth() + 
-  guides(color=guide_legend(title="zachmurzenie"),fill=guide_legend(title="zachmurzenie")) + 
+  group_by(anno,day,ora,colr) %>%
+  summarise(kwh2 = mean(kwh)) %>%
+  ggplot(aes(x = ora, y = kwh2, fill = factor(colr), color  = factor(colr))) +
+  geom_smooth() +
+  guides(color=guide_legend(title="zachmurzenie"),fill=guide_legend(title="zachmurzenie")) +
   facet_grid(. ~ anno) +
   xlab("godzina")+ylab("kwh")
 ```
@@ -158,13 +163,13 @@ df %>%
 Atrybuty kwh i irradimento zostały uśrednione dla danej godziny (ora) z okresu całego roku
 
 ```{r}
-df %>% 
-  group_by(anno,day,ora) %>% 
-  summarise(kwh2 = mean(kwh), irr = mean(irradiamento)) %>% 
-  ggplot(aes(x = ora)) + 
-  geom_smooth(aes(y=kwh2, color = "kwh", fill = "kwh")) + 
-  geom_smooth(aes(y=irr, color = "nasłonecznienie", fill = "nasłonecznienie")) + 
-  guides(color=guide_legend(title=""),fill=guide_legend(title="")) + 
+df %>%
+  group_by(anno,day,ora) %>%
+  summarise(kwh2 = mean(kwh), irr = mean(irradiamento)) %>%
+  ggplot(aes(x = ora)) +
+  geom_smooth(aes(y=kwh2, color = "kwh", fill = "kwh")) +
+  geom_smooth(aes(y=irr, color = "nasłonecznienie", fill = "nasłonecznienie")) +
+  guides(color=guide_legend(title=""),fill=guide_legend(title="")) +
   facet_grid(. ~ anno) +
   xlab("godzina")+ylab("wartość")
 ```
@@ -172,17 +177,17 @@ df %>%
 ### Średni kwh od nasłonecznienia i wilgotności
 
 ```{r}
-df %>% 
-  group_by(irradiamento,humidity) %>% 
-  summarise(kwh2 = mean(kwh)) %>% 
-  ggplot(aes(x = irradiamento, y = kwh2,  color  = humidity)) + 
+df %>%
+  group_by(irradiamento,humidity) %>%
+  summarise(kwh2 = mean(kwh)) %>%
+  ggplot(aes(x = irradiamento, y = kwh2,  color  = humidity)) +
   geom_point()+
   xlab("nasłonecznienie")+ylab("kwh")
 
-df %>% 
-  group_by(humidity,irradiamento) %>% 
-  summarise(kwh2 = mean(kwh)) %>% 
-  ggplot(aes(x = humidity, y = kwh2,  color = irradiamento)) + 
+df %>%
+  group_by(humidity,irradiamento) %>%
+  summarise(kwh2 = mean(kwh)) %>%
+  ggplot(aes(x = humidity, y = kwh2,  color = irradiamento)) +
   geom_point()+
   xlab("wilgotność")+ylab("kwh")
 
@@ -193,43 +198,46 @@ Na powyższych wykresach można zauważyć korelację atrybutu kwh z wartością
 ### Średni kwh i średnie nasłonecznienie od miesiąca
 
 ```{r}
-df %>% 
+df %>%
   mutate(miesiac =  month(date, label = TRUE, abbr = FALSE)) %>%
-  group_by(miesiac) %>% 
-  summarise(kwh2 = mean(kwh), irr = mean(irradiamento)) %>% 
-  ggplot(aes(x = miesiac)) + 
+  group_by(miesiac) %>%
+  summarise(kwh2 = mean(kwh), irr = mean(irradiamento)) %>%
+  ggplot(aes(x = miesiac)) +
   geom_bar(stat = "identity", aes(y = kwh2, fill = "kwh")) +
   geom_bar(stat = "identity", aes(y = irr, fill = "nasłonecznienie")) +
-  guides(fill=guide_legend(title="")) + 
+  guides(fill=guide_legend(title="")) +
   xlab("godzina")+ylab("wartość")
 
 ```
 
 Z wykresu wynika, że najwyższa wartość kwh jest latem i osiąga maksimum w czerwcu. Ponownie można zauważyć korelację kwh i nasłonecznienia.
 
-### test
+### Średni kwh w zależności od szerokości i wysokości geograficznej oraz miesiąca
 
-```{r}
-p <- df %>% ggplot(aes(x=kwh,y=irradiamento,frame = ora)) + geom_point()
+```{r, cache=FALSE}
 
+inputPanel(sliderInput("adj",label="Miesiąc",min=1,max=12,value=1,step=1))
 
+renderPlot({
+  df %>% mutate(mon = month(date)) %>% group_by(mon,lat,lon) %>% filter(mon == input$adj) %>% mutate(xx = round(lat*20)/20, yy = round(lon*20)/20, kw = mean(kwh)) %>% ggplot(aes(x=xx,y=yy, fill = kw)) + geom_tile()
+})
 
 ```
 
-
 ## Regresja
 
+W celu zbadania wpływu atrybutów na jakość przewidzenia wytwarzanej energii w ujęciu godzinowym zbudowano kilka modelów regresji i zbadano ich jakość na podstawie miary RMSE
+
 ```{r}
+set.seed(123)
 
 attrs1 <- df %>% select(lat,lon,ageinmonths,anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,humidity,dewpoint,windbearing,cloudcover,altitude,azimuth,kwh)
 attrs2 <- df %>% select(ora,irradiamento,kwh)
 attrs3 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,humidity,dewpoint,windbearing,cloudcover,altitude,azimuth,kwh)
-attrs4 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,dewpoint,cloudcover,altitude,azimuth,kwh)
-attrs5 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,dewpoint,cloudcover,kwh)
-attrs6 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,dewpoint,cloudcover,kwh)
+attrs4 <- df %>% select(anno,day,ora,temperatura_ambiente,irradiamento,pressure,windspeed,dewpoint,cloudcover,kwh)
 
 inTrain <- createDataPartition(y = df$kwh, p = .75, list = FALSE)
-results <- lapply(list(attrs1,attrs2), function(a)
+results <- lapply(list(attrs1,attrs2, attrs3, attrs4), function(a)
 {
   training <- a[inTrain,]
   testing <- a[-inTrain,]
@@ -243,14 +251,45 @@ tab <- do.call(rbind.data.frame,results)
 
 knitr::kable(tab,col.names = c("atrybuty","RMSE"))
 
-# inTrain <- createDataPartition(y = df$kwh, p = .75, list = FALSE)
-# training <- attrs[inTrain,]
-# testing <- attrs[-inTrain,]
-# 
-# 
-# 
-# fit <- train(kwh~., data = training, method = "lm", metric = "RMSE")
-# pred <- predict(fit, newdata = testing)
-# rmse <- defaultSummary(data.frame(obs=testing$kwh, pred=pred))$RMSE
-# rmse
 ```
+
+Najlepszym modelem regresji okazał się pierwszy testowany model z atrybutami lat, lon, ageinmonths, anno, day, ora, temperatura_ambiente, irradiamento, pressure, windspeed, humidity, dewpoint, windbearing, cloudcover, altitude, azimuth i kwh.
+
+### Analiza ważności atrybutów dla najlepszego modelu regresji
+
+```{r}
+set.seed(123)
+attrs1 <- df %>% select(lat,ora,kwh)
+attrs2 <- df %>% select(lon,ora,kwh)
+attrs3 <- df %>% select(ageinmonths,ora,kwh)
+attrs4 <- df %>% select(anno,ora,kwh)
+attrs5 <- df %>% select(day,ora,kwh)
+attrs6 <- df %>% select(temperatura_ambiente,ora,kwh)
+attrs7 <- df %>% select(irradiamento,ora,kwh)
+attrs8 <- df %>% select(pressure,ora,kwh)
+attrs9 <- df %>% select(windspeed,ora,kwh)
+attrs10 <- df %>% select(humidity,ora,kwh)
+attrs11 <- df %>% select(dewpoint,ora,kwh)
+attrs12 <- df %>% select(windbearing,ora,kwh)
+attrs13 <- df %>% select(cloudcover,ora,kwh)
+attrs14 <- df %>% select(altitude,ora,kwh)
+attrs15 <- df %>% select(azimuth,ora,kwh)
+
+inTrain <- createDataPartition(y = df$kwh, p = .75, list = FALSE)
+results <- lapply(list(attrs1,attrs2, attrs3, attrs4, attrs5, attrs6, attrs7, attrs8, attrs9, attrs10, attrs11, attrs12, attrs13, attrs14, attrs15), function(a)
+{
+  training <- a[inTrain,]
+  testing <- a[-inTrain,]
+
+  fit <- train(kwh~., data = training, method = "lm", metric = "RMSE")
+  pred <- predict(fit, newdata = testing)
+  rmse <- defaultSummary(data.frame(obs=testing$kwh, pred=pred))[1]
+  data.frame(paste(colnames(a),collapse=", "),rmse)
+})
+tab <- do.call(rbind.data.frame,results)
+
+knitr::kable(tab,col.names = c("atrybuty","RMSE"))
+
+```
+
+Jak można było przewidzieć, najistotniejszy wpływ na jakość predykcji ma atrybut irradiamento, czyli nasłonecznienie.
