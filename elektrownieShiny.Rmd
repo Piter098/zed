@@ -1,7 +1,8 @@
 ---
-title: "Raport elektrownie (wersja bez shiny)"
+title: "Raport elektrownie"
 author: "Piotr Langa 117330"
 date: "27 listopada 2017"
+runtime: shiny
 output:
   html_document:
     toc: true
@@ -35,6 +36,7 @@ library(ggplot2)
 library(reshape2)
 library(lubridate)
 library(caret)
+library(shiny)
 ```
 
 ## Przygotowanie danych
@@ -69,7 +71,7 @@ a <- lapply(colnames(liczbAtr %>% select(-id)), function(x){ c(x, min = min(licz
 
 tab <- do.call(rbind, a)
 
-# knitr::kable(tab,col.names = c("Atrybut","Minimum","Maksimum","Mediana","Średnia","Wartości unikalne"))
+knitr::kable(tab,col.names = c("Atrybut","Minimum","Maksimum","Mediana","Średnia","Wartości unikalne"))
 # 
 # attrs <- melt(liczbAtr, id.vars = 'id')
 #  ggplot(attrs, aes(x = value)) +
@@ -118,7 +120,7 @@ a <- lapply(colnames(liczbAtr), function(x){ c(x, uniq = length(unique(liczbAtr[
 
 tab <- do.call(rbind, a)
 
-# knitr::kable(tab,col.names = c("Atrybut","Wartości unikalne"))
+knitr::kable(tab,col.names = c("Atrybut","Wartości unikalne"))
 # 
 # attrs <- melt(liczbAtr, id.vars = 'id')
 #  ggplot(attrs, aes(x = value)) +
@@ -212,14 +214,13 @@ Z wykresu wynika, że najwyższa wartość kwh jest latem i osiąga maksimum w c
 
 ### Średni kwh w zależności od szerokości i wysokości geograficznej oraz miesiąca
 
-Tutaj powinna znaleźć się sekcja z interaktywnym wykresem w shiny, ale shiny odmówił współpracy
 ```{r, cache=FALSE}
 
-# inputPanel(sliderInput("adj",label="Miesiąc",min=1,max=12,value=1,step=1))
-# 
-# renderPlot({
-#   df %>% mutate(mon = month(date)) %>% group_by(mon,lat,lon) %>% filter(mon == input$adj) %>% mutate(xx = round(lat*20)/20, yy = round(lon*20)/20, kw = mean(kwh)) %>% ggplot(aes(x=xx,y=yy, fill = kw)) + geom_tile()
-# })
+inputPanel(sliderInput("adj",label="Miesiąc",min=1,max=12,value=1,step=1))
+
+renderPlot({
+  df %>% mutate(mon = month(date)) %>% group_by(mon,lat,lon) %>% filter(mon == input$adj) %>% mutate(xx = round(lat*20)/20, yy = round(lon*20)/20, kw = mean(kwh)) %>% ggplot(aes(x=xx,y=yy, fill = kw)) + geom_tile()
+})
 
 ```
 

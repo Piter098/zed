@@ -33,5 +33,4 @@ vignettes/*.pdf
 *.knit.md
 .Rproj.user
 /elektrownie.csv
-/elektrownie.html
 /test.html
